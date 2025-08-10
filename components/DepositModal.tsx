@@ -21,6 +21,9 @@ import {
   PendingTransaction,
 } from "@/stores/transactionHistoryStore";
 import { getBalanceFromStoredProofs } from "@/utils/cashuUtils";
+import { useInvoiceSync } from "@/hooks/useInvoiceSync";
+import { useInvoiceChecker } from "@/hooks/useInvoiceChecker";
+import { MintQuoteState } from "@cashu/cashu-ts";
 
 // Helper function to generate unique IDs
 const generateId = () => crypto.randomUUID();
@@ -71,6 +74,8 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, mintUrl, b
   const cashuStore = useCashuStore();
   const { sendToken, receiveToken, cleanSpentProofs, cleanupPendingProofs, isLoading: isTokenLoading, error: hookError } = useCashuToken();
   const transactionHistoryStore = useTransactionHistoryStore();
+  const { addInvoice, updateInvoice } = useInvoiceSync();
+  const { triggerCheck } = useInvoiceChecker();
 
   useEffect(() => {
     if (hookError) {
@@ -118,6 +123,17 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, mintUrl, b
       setInvoice(invoiceData.paymentRequest);
       setcurrentMeltQuoteId(invoiceData.quoteId);
       setPaymentRequest(invoiceData.paymentRequest);
+
+      // Store invoice persistently
+      await addInvoice({
+        type: 'mint',
+        mintUrl: cashuStore.activeMintUrl,
+        quoteId: invoiceData.quoteId,
+        paymentRequest: invoiceData.paymentRequest,
+        amount: amount,
+        state: MintQuoteState.UNPAID,
+        expiresAt: invoiceData.expiresAt
+      });
 
       const pendingTxId = generateId();
       const pendingTransaction: PendingTransaction = {
@@ -170,6 +186,12 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, mintUrl, b
           mintUrl,
           proofsToAdd: proofs,
           proofsToRemove: [],
+        });
+
+        // Update stored invoice status
+        await updateInvoice(quoteId, {
+          state: MintQuoteState.PAID,
+          paidAt: Date.now()
         });
 
         transactionHistoryStore.removePendingTransaction(pendingTxId);

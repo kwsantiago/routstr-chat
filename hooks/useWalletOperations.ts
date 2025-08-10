@@ -2,6 +2,7 @@ import { useCallback, useRef } from 'react';
 import { CashuMint, CashuWallet, MintQuoteState } from '@cashu/cashu-ts';
 import { TransactionHistory } from '@/types/chat';
 import { fetchBalances } from '@/utils/cashuUtils';
+import { useInvoiceSync } from '@/hooks/useInvoiceSync';
 
 // Types for Cashu
 interface CashuProof {
@@ -38,6 +39,7 @@ export function useWalletOperations({
   const mintQuoteRef = useRef<MintQuoteResponse | null>(null);
   const checkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { addInvoice, updateInvoice } = useInvoiceSync();
 
   // Initialize wallet
   const initWallet = useCallback(async () => {
@@ -87,6 +89,14 @@ export function useWalletOperations({
 
           const {apiBalance, proofsBalance} = await fetchBalances(mintUrl, baseUrl);
           setBalance((apiBalance / 1000) + newBalance)
+          
+          // Update invoice status to paid
+          if (mintQuoteRef.current) {
+            await updateInvoice(mintQuoteRef.current.quote, {
+              state: MintQuoteState.PAID,
+              paidAt: Date.now()
+            });
+          }
 
           setSuccessMessage('Payment received! Tokens minted successfully.');
           const newTransaction: TransactionHistory = {
@@ -156,6 +166,18 @@ export function useWalletOperations({
       setMintQuote(quote);
       mintQuoteRef.current = quote;
       setMintInvoice(quote.request || '');
+      
+      // Store invoice persistently
+      await addInvoice({
+        type: 'mint',
+        mintUrl: mintUrl,
+        quoteId: quote.quote,
+        paymentRequest: quote.request || '',
+        amount: amount,
+        state: MintQuoteState.UNPAID,
+        expiresAt: quote.expiry ? quote.expiry * 1000 : undefined
+      });
+      
       setSuccessMessage('Invoice generated! Pay it to mint tokens.');
       setShowInvoiceModal(true);
     } catch (err) {

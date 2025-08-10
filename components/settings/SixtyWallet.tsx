@@ -21,6 +21,10 @@ import {
   PendingTransaction,
 } from "@/stores/transactionHistoryStore";
 import { getBalanceFromStoredProofs } from "@/utils/cashuUtils";
+import { useInvoiceSync } from "@/hooks/useInvoiceSync";
+import { useInvoiceChecker } from "@/hooks/useInvoiceChecker";
+import { MintQuoteState, MeltQuoteState } from "@cashu/cashu-ts";
+import InvoiceHistory from './InvoiceHistory';
 
 // Helper function to generate unique IDs
 const generateId = () => crypto.randomUUID();
@@ -30,7 +34,7 @@ const SixtyWallet: React.FC<{mintUrl:string, usingNip60: boolean, setUsingNip60:
   const popularAmounts = [100, 500, 1000];
   
   // Tab state
-  const [activeTab, setActiveTab] = useState<'deposit' | 'send'>('deposit');
+  const [activeTab, setActiveTab] = useState<'deposit' | 'send' | 'history'>('deposit');
 
   // Lightning state variables (from Chorus)
   const [receiveAmount, setReceiveAmount] = useState("");
@@ -96,6 +100,17 @@ const SixtyWallet: React.FC<{mintUrl:string, usingNip60: boolean, setUsingNip60:
       setPaymentRequest(invoiceData.paymentRequest);
       setShowInvoiceModal(true); // Automatically show QR code modal
 
+      // Store invoice persistently
+      await addInvoice({
+        type: 'mint',
+        mintUrl: cashuStore.activeMintUrl,
+        quoteId: invoiceData.quoteId,
+        paymentRequest: invoiceData.paymentRequest,
+        amount: amount,
+        state: MintQuoteState.UNPAID,
+        expiresAt: invoiceData.expiresAt
+      });
+
       // Create pending transaction
       const pendingTxId = generateId();
       const pendingTransaction: PendingTransaction = {
@@ -156,6 +171,12 @@ const SixtyWallet: React.FC<{mintUrl:string, usingNip60: boolean, setUsingNip60:
           proofsToRemove: [],
         });
 
+        // Update stored invoice status
+        await updateInvoice(quoteId, {
+          state: MintQuoteState.PAID,
+          paidAt: Date.now()
+        });
+
         // Remove the pending transaction
         transactionHistoryStore.removePendingTransaction(pendingTxId);
         setPendingTransactionId(null);
@@ -204,6 +225,8 @@ const SixtyWallet: React.FC<{mintUrl:string, usingNip60: boolean, setUsingNip60:
   const cashuStore = useCashuStore();
   const { sendToken, receiveToken, cleanSpentProofs, cleanupPendingProofs, isLoading: isTokenLoading, error: hookError, addMintIfNotExists } = useCashuToken();
   const transactionHistoryStore = useTransactionHistoryStore();
+  const { addInvoice, updateInvoice } = useInvoiceSync();
+  const { triggerCheck } = useInvoiceChecker();
 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -435,6 +458,17 @@ const SixtyWallet: React.FC<{mintUrl:string, usingNip60: boolean, setUsingNip60:
         return;
       }
 
+      // Store melt invoice persistently before payment attempt
+      await addInvoice({
+        type: 'melt',
+        mintUrl: mintUrl,
+        quoteId: currentMeltQuoteId,
+        paymentRequest: sendInvoice,
+        amount: invoiceAmount,
+        state: MeltQuoteState.UNPAID,
+        fee: invoiceFeeReserve || undefined
+      });
+
       // Pay the invoice
       const result = await payMeltQuote(
         mintUrl,
@@ -443,6 +477,13 @@ const SixtyWallet: React.FC<{mintUrl:string, usingNip60: boolean, setUsingNip60:
       );
 
       if (result.success) {
+        // Update invoice status
+        await updateInvoice(currentMeltQuoteId, {
+          state: MeltQuoteState.PAID,
+          paidAt: Date.now(),
+          fee: result.fee
+        });
+
         // Remove spent proofs from the store
         await updateProofs({
           mintUrl,
@@ -762,6 +803,17 @@ const SixtyWallet: React.FC<{mintUrl:string, usingNip60: boolean, setUsingNip60:
           >
             Send
           </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'history'
+                ? 'text-white bg-white/5 border-b-2 border-white/30'
+                : 'text-white/70 hover:text-white/90 hover:bg-white/5'
+            }`}
+            type="button"
+          >
+            Invoices
+          </button>
         </div>
 
         {/* Tab Content Container with Fixed Height */}
@@ -989,6 +1041,13 @@ const SixtyWallet: React.FC<{mintUrl:string, usingNip60: boolean, setUsingNip60:
                   Share your generated token with others to send them eCash.
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* History Tab Content */}
+          {activeTab === 'history' && (
+            <div className="h-full">
+              <InvoiceHistory mintUrl={cashuStore.activeMintUrl} />
             </div>
           )}
         </div>

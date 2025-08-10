@@ -3,7 +3,8 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { ArrowDownLeft, ArrowUpRight, Copy, Check, Zap, ArrowLeft, Clock, Trash2, QrCode, ExternalLink, Settings } from 'lucide-react';
 import QRCode from 'react-qr-code';
-import { getEncodedTokenV4 } from "@cashu/cashu-ts";
+import { getEncodedTokenV4, MeltQuoteState } from "@cashu/cashu-ts";
+import { useInvoiceSync } from '@/hooks/useInvoiceSync';
 import { useChat } from '@/context/ChatProvider';
 import { useAuth } from '@/context/AuthProvider';
 import { useNostr } from '@/context/NostrContext';
@@ -41,6 +42,7 @@ const BalanceDisplay: React.FC<BalanceDisplayProps> = ({ setIsSettingsOpen, setI
   const { isAuthenticated } = useAuth();
   const { balance, isBalanceLoading, setIsLoginModalOpen, mintUrl, baseUrl, transactionHistory, setTransactionHistory, setBalance } = useChat();
   const { publicKey } = useNostr();
+  const { addInvoice, updateInvoice } = useInvoiceSync();
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'send' | 'receive' | 'activity' | 'invoice'>('overview');
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -383,6 +385,17 @@ const BalanceDisplay: React.FC<BalanceDisplayProps> = ({ setIsSettingsOpen, setI
       // Parse amount from invoice
       setInvoiceAmount(meltQuote.amount);
       setInvoiceFeeReserve(meltQuote.fee_reserve);
+      
+      // Store melt invoice persistently
+      await addInvoice({
+        type: 'melt',
+        mintUrl: mintUrl,
+        quoteId: meltQuote.quote,
+        paymentRequest: value,
+        amount: meltQuote.amount,
+        state: MeltQuoteState.UNPAID,
+        fee: meltQuote.fee_reserve
+      });
     } catch (error) {
       console.error("Error creating NIP-60 melt quote:", error);
       setError("Failed to create melt quote: " + (error instanceof Error ? error.message : String(error)));
@@ -444,6 +457,12 @@ const BalanceDisplay: React.FC<BalanceDisplayProps> = ({ setIsSettingsOpen, setI
           mintUrl,
           proofsToAdd: [...result.keep, ...result.change],
           proofsToRemove: selectedProofs,
+        });
+        
+        // Update invoice status to paid
+        await updateInvoice(nip60MeltQuoteId, {
+          state: MeltQuoteState.PAID,
+          paidAt: Date.now()
         });
 
         setSuccessMessage(`Paid ${formatBalance(invoiceAmount)}!`);

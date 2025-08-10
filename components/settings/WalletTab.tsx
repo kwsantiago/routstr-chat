@@ -3,6 +3,7 @@ import { useWalletOperations } from '@/hooks/useWalletOperations';
 import { TransactionHistory } from '@/types/chat';
 import { MintQuoteState } from '@cashu/cashu-ts';
 import InvoiceModal from './InvoiceModal';
+import InvoiceHistory from './InvoiceHistory';
 
 // Types for Cashu
 interface MintQuoteResponse {
@@ -146,7 +147,7 @@ const WalletTab: React.FC<WalletTabProps> = ({
   const popularAmounts = [100, 500, 1000];
   
   // Tab state
-  const [activeTab, setActiveTab] = useState<'deposit' | 'send'>('deposit');
+  const [activeTab, setActiveTab] = useState<'deposit' | 'send' | 'history'>('deposit');
 
   // Handle quick mint button click
   const handleQuickMint = async (amount: number) => {
@@ -203,6 +204,17 @@ const WalletTab: React.FC<WalletTabProps> = ({
             type="button"
           >
             Send
+          </button>
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors cursor-pointer ${
+              activeTab === 'history'
+                ? 'text-white bg-white/5 border-b-2 border-white'
+                : 'text-white/70 hover:text-white/90 hover:bg-white/5'
+            }`}
+            type="button"
+          >
+            Invoices
           </button>
         </div>
 
@@ -363,6 +375,13 @@ const WalletTab: React.FC<WalletTabProps> = ({
                   Share your generated token with others to send them eCash.
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* History Tab Content */}
+          {activeTab === 'history' && (
+            <div className="h-full">
+              <InvoiceHistory mintUrl={mintUrl} />
             </div>
           )}
         </div>
