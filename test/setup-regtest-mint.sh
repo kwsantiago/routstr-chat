@@ -16,13 +16,29 @@ fi
 docker stop cashu-regtest-mint 2>/dev/null || true
 docker rm cashu-regtest-mint 2>/dev/null || true
 
-# Copy LND files
+# Copy LND files - use docker cp for CI compatibility
 mkdir -p /tmp/cashu-lnd
-cp "$REGTEST_DIR/data/lnd-2/tls.cert" /tmp/cashu-lnd/ 2>/dev/null || {
-    echo "Could not copy LND files. Check regtest is running."
-    exit 1
-}
-cp "$REGTEST_DIR/data/lnd-2/data/chain/bitcoin/regtest/admin.macaroon" /tmp/cashu-lnd/
+
+# Try direct copy first (for local dev)
+if cp "$REGTEST_DIR/data/lnd-2/tls.cert" /tmp/cashu-lnd/ 2>/dev/null; then
+    cp "$REGTEST_DIR/data/lnd-2/data/chain/bitcoin/regtest/admin.macaroon" /tmp/cashu-lnd/ 2>/dev/null || {
+        # Try docker cp as fallback for macaroon
+        docker cp cashu-lnd-2:/root/.lnd/data/chain/bitcoin/regtest/admin.macaroon /tmp/cashu-lnd/ || {
+            echo "Could not copy admin.macaroon. Check regtest is running."
+            exit 1
+        }
+    }
+else
+    # Use docker cp (for CI)
+    docker cp cashu-lnd-2:/root/.lnd/tls.cert /tmp/cashu-lnd/ || {
+        echo "Could not copy tls.cert. Check regtest is running."
+        exit 1
+    }
+    docker cp cashu-lnd-2:/root/.lnd/data/chain/bitcoin/regtest/admin.macaroon /tmp/cashu-lnd/ || {
+        echo "Could not copy admin.macaroon. Check regtest is running."
+        exit 1
+    }
+fi
 
 # Start mint
 docker run -d \
