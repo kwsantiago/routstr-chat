@@ -41,3 +41,9 @@ yarn-error.log*
 /playwright-report/
 /blob-report/
 /playwright/*
+
+# Test environment files
+/test/mint-data/
+/test/*.log
+/test/temp/
+*.test.local
