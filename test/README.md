@@ -2,24 +2,45 @@
 
 Lightning invoice testing with regtest.
 
-## Setup
+## Quick Start
 
 ```bash
-# Get regtest environment
+# Run all tests
+npm run test:invoices
+
+# Or use the test runner
+./test/run-tests.sh
+```
+
+## Test Files
+
+- `invoice-persistence.test.js` - Basic invoice tests
+- `e2e-invoice.test.js` - End-to-end tests
+- `run-tests.sh` - Run all tests
+- `setup-regtest-mint.sh` - Setup Cashu mint
+- `pay-invoice.sh` - Pay invoices
+
+## CI/CD
+
+Tests run automatically on PRs that modify:
+- Lightning/Cashu code
+- Invoice hooks
+- Store files
+
+See `.github/workflows/test-invoices.yml`
+
+## Manual Setup
+
+```bash
+# Get regtest
 cd ~ && git clone https://github.com/callebtc/cashu-regtest.git
 cd ~/cashu-regtest && ./start.sh
 
 # Start mint
-./setup-regtest-mint.sh
+npm run test:setup
 
-# Run app
-npm run dev
+# Run tests
+npm run test:invoices
 ```
-
-## Files
-
-- `LIGHTNING_TESTING_SETUP.md` - Full documentation
-- `setup-regtest-mint.sh` - Starts Cashu mint
-- `pay-invoice.sh` - Pay invoices
 
 See [setup guide](./LIGHTNING_TESTING_SETUP.md) for details.

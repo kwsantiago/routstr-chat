@@ -6,7 +6,9 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:invoices": "node test/invoice-persistence.test.js",
+    "test:setup": "./test/setup-regtest-mint.sh"
   },
   "dependencies": {
     "@cashu/cashu-ts": "^2.5.2",
