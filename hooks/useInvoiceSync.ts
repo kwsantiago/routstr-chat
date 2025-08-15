@@ -19,6 +19,8 @@ export interface StoredInvoice {
   checkedAt?: number;
   paidAt?: number;
   fee?: number;
+  retryCount?: number;
+  nextRetryAt?: number;
 }
 
 interface InvoiceStore {
@@ -211,10 +213,16 @@ export function useInvoiceSync() {
   const getPendingInvoices = useCallback((): StoredInvoice[] => {
     const invoices = invoicesQuery.data || getLocalInvoices();
     const now = Date.now();
+    const MAX_RETRIES = 10;
     
     return invoices.filter(inv => {
       // Skip if already successfully issued (tokens minted)
       if ((inv.state as string) === 'ISSUED') {
+        return false;
+      }
+      
+      // Skip if max retries exceeded
+      if ((inv.retryCount || 0) >= MAX_RETRIES) {
         return false;
       }
       
@@ -227,9 +235,18 @@ export function useInvoiceSync() {
         return false;
       }
       
-      // Check if it's been more than 30 seconds since last check
+      // Respect exponential backoff timing
+      if (inv.nextRetryAt && now < inv.nextRetryAt) {
+        return false;
+      }
+      
+      // Initial check or retry based on backoff
+      const retryCount = inv.retryCount || 0;
       const lastCheck = inv.checkedAt || inv.createdAt;
-      return (now - lastCheck) > 30000;
+      const baseInterval = 30000; // 30 seconds
+      const backoffInterval = Math.min(baseInterval * Math.pow(2, retryCount), 300000); // Max 5 minutes
+      
+      return (now - lastCheck) > backoffInterval;
     });
   }, [invoicesQuery.data, getLocalInvoices]);
 
@@ -260,12 +277,36 @@ export function useInvoiceSync() {
     }
   }, [getLocalInvoices, saveLocalInvoices, user, cloudSyncEnabled, syncInvoicesMutation]);
 
+  // Delete invoice
+  const deleteInvoice = useCallback(async (id: string) => {
+    const invoices = getLocalInvoices();
+    const filtered = invoices.filter(inv => inv.id !== id);
+    saveLocalInvoices(filtered);
+    
+    if (user && cloudSyncEnabled) {
+      await syncInvoicesMutation.mutateAsync(filtered);
+    }
+    
+    queryClient.invalidateQueries({ queryKey: ['invoices', user?.pubkey, INVOICES_D_TAG] });
+  }, [getLocalInvoices, saveLocalInvoices, user, cloudSyncEnabled, syncInvoicesMutation, queryClient]);
+  
+  // Reset retry count for an invoice
+  const resetInvoiceRetry = useCallback(async (id: string) => {
+    await updateInvoice(id, {
+      retryCount: 0,
+      nextRetryAt: undefined,
+      checkedAt: undefined
+    });
+  }, [updateInvoice]);
+
   return {
     invoices: invoicesQuery.data || [],
     isLoading: invoicesQuery.isLoading,
     isSyncing: syncInvoicesMutation.isPending,
     addInvoice,
     updateInvoice,
+    deleteInvoice,
+    resetInvoiceRetry,
     getPendingInvoices,
     cleanupOldInvoices,
     cloudSyncEnabled,

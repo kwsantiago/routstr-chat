@@ -5,11 +5,13 @@ import { useCashuStore } from '@/stores/cashuStore';
 import { useCashuToken } from '@/hooks/useCashuToken';
 import { toast } from 'sonner';
 import { formatBalance } from '@/lib/cashu';
+import { useTransactionHistoryStore } from '@/stores/transactionHistoryStore';
 
 export function useInvoiceChecker() {
   const { invoices, getPendingInvoices, updateInvoice, cleanupOldInvoices } = useInvoiceSync();
   const cashuStore = useCashuStore();
   const { receiveToken } = useCashuToken();
+  const transactionHistoryStore = useTransactionHistoryStore();
   const [isChecking, setIsChecking] = useState(false);
   const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastCheckRef = useRef<number>(0);
@@ -44,6 +46,14 @@ export function useInvoiceChecker() {
                 state: MintQuoteState.ISSUED
               });
               
+              // Remove any pending transaction for this invoice
+              const pendingTx = transactionHistoryStore.pendingTransactions.find(
+                tx => tx.quoteId === invoice.quoteId
+              );
+              if (pendingTx) {
+                transactionHistoryStore.removePendingTransaction(pendingTx.id);
+              }
+              
               // Show success notification
               toast.success(
                 `Lightning invoice paid! Received ${formatBalance(invoice.amount, 'sats')}`,
@@ -64,6 +74,15 @@ export function useInvoiceChecker() {
                 if (proofs.length > 0) {
                   cashuStore.addProofs(proofs, `invoice-${invoice.id}`);
                   await updateInvoice(invoice.id, { state: MintQuoteState.ISSUED });
+                  
+                  // Remove any pending transaction for this invoice
+                  const pendingTx = transactionHistoryStore.pendingTransactions.find(
+                    tx => tx.quoteId === invoice.quoteId
+                  );
+                  if (pendingTx) {
+                    transactionHistoryStore.removePendingTransaction(pendingTx.id);
+                  }
+                  
                   toast.success(
                     `Lightning invoice paid! Recovered ${formatBalance(invoice.amount, 'sats')}`,
                     { duration: 5000 }
@@ -92,6 +111,14 @@ export function useInvoiceChecker() {
               const proofsAfter = cashuStore.proofs;
               const balanceAfter = proofsAfter.reduce((sum, p) => sum + p.amount, 0);
               if (balanceAfter > balanceBefore) {
+                // Remove any pending transaction for this invoice
+                const pendingTx = transactionHistoryStore.pendingTransactions.find(
+                  tx => tx.quoteId === invoice.quoteId
+                );
+                if (pendingTx) {
+                  transactionHistoryStore.removePendingTransaction(pendingTx.id);
+                }
+                
                 toast.success(
                   `Lightning invoice paid! Recovered ${formatBalance(invoice.amount, 'sats')}`,
                   { duration: 5000 }
@@ -116,6 +143,17 @@ export function useInvoiceChecker() {
       return false;
     } catch (error) {
       console.error(`Error checking mint invoice ${invoice.id}:`, error);
+      
+      // Update retry count and next retry time
+      const retryCount = (invoice.retryCount || 0) + 1;
+      const baseInterval = 30000; // 30 seconds
+      const nextRetryDelay = Math.min(baseInterval * Math.pow(2, retryCount), 300000); // Max 5 minutes
+      
+      await updateInvoice(invoice.id, {
+        retryCount,
+        nextRetryAt: Date.now() + nextRetryDelay
+      });
+      
       return false;
     }
   }, [cashuStore, updateInvoice]);
@@ -151,6 +189,17 @@ export function useInvoiceChecker() {
       return false;
     } catch (error) {
       console.error(`Error checking melt invoice ${invoice.id}:`, error);
+      
+      // Update retry count and next retry time
+      const retryCount = (invoice.retryCount || 0) + 1;
+      const baseInterval = 30000; // 30 seconds
+      const nextRetryDelay = Math.min(baseInterval * Math.pow(2, retryCount), 300000); // Max 5 minutes
+      
+      await updateInvoice(invoice.id, {
+        retryCount,
+        nextRetryAt: Date.now() + nextRetryDelay
+      });
+      
       return false;
     }
   }, [updateInvoice]);
@@ -204,7 +253,7 @@ export function useInvoiceChecker() {
     // Clean up old invoices on mount
     cleanupOldInvoices();
     
-    // Set up interval for checking (every 60 seconds)
+    // Set up interval for checking (every minute)
     checkIntervalRef.current = setInterval(() => {
       checkPendingInvoices();
     }, 60000);
