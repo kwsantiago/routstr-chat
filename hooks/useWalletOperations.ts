@@ -169,7 +169,6 @@ export function useWalletOperations({
       }
 
       const quote = await cashuWalletRef.current.createMintQuote(amount);
-      console.log(quote);
       setMintQuote(quote);
       mintQuoteRef.current = quote;
       setMintInvoice(quote.request || '');

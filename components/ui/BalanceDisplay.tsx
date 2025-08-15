@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { ArrowDownLeft, ArrowUpRight, Copy, Check, Zap, ArrowLeft, Clock, Trash2, QrCode, ExternalLink, Settings, ChevronDown } from 'lucide-react';
 import QRCode from 'react-qr-code';
-import { getDecodedToken, getEncodedTokenV4, MeltQuoteState } from "@cashu/cashu-ts";
+import { getDecodedToken, getEncodedTokenV4, MeltQuoteState, MintQuoteState } from "@cashu/cashu-ts";
 import { useInvoiceSync } from '@/hooks/useInvoiceSync';
 import { useChat } from '@/context/ChatProvider';
 import { useAuth } from '@/context/AuthProvider';
@@ -332,6 +332,17 @@ const BalanceDisplay: React.FC<BalanceDisplayProps> = ({ setIsSettingsOpen, setI
       const invoiceData = await createLightningInvoice(cashuStore.activeMintUrl, amount);
       setNip60Invoice(invoiceData.paymentRequest);
       setNip60QuoteId(invoiceData.quoteId);
+
+      // Store invoice persistently for recovery
+      await addInvoice({
+        type: 'mint',
+        mintUrl: cashuStore.activeMintUrl,
+        quoteId: invoiceData.quoteId,
+        paymentRequest: invoiceData.paymentRequest,
+        amount: amount,
+        state: MintQuoteState.UNPAID,
+        expiresAt: invoiceData.expiry ? invoiceData.expiry * 1000 : undefined
+      });
 
       // Create pending transaction
       const pendingTxId = generateId();
