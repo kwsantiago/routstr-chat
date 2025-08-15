@@ -341,7 +341,7 @@ const BalanceDisplay: React.FC<BalanceDisplayProps> = ({ setIsSettingsOpen, setI
         paymentRequest: invoiceData.paymentRequest,
         amount: amount,
         state: MintQuoteState.UNPAID,
-        expiresAt: invoiceData.expiry ? invoiceData.expiry * 1000 : undefined
+        expiresAt: invoiceData.expiresAt
       });
 
       // Create pending transaction
