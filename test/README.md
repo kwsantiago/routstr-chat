@@ -14,7 +14,9 @@ npm run test:invoices
 
 ## Test Files
 
-- `invoice-persistence.test.js` - Basic invoice tests
+- `invoice-persistence.test.js` - Comprehensive unit tests (no dependencies)
+- `invoice-integration.test.js` - Integration tests with real mint
+- `invoice-status-states.test.js` - State transition tests
 - `e2e-invoice.test.js` - End-to-end tests
 - `run-tests.sh` - Run all tests
 - `setup-regtest-mint.sh` - Setup Cashu mint
