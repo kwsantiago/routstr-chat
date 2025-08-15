@@ -128,13 +128,7 @@ const SixtyWallet: React.FC<{mintUrl:string, usingNip60: boolean, setUsingNip60:
       transactionHistoryStore.addPendingTransaction(pendingTransaction);
       setPendingTransactionId(pendingTxId);
 
-      // Start polling for payment status
-      checkPaymentStatus(
-        cashuStore.activeMintUrl,
-        invoiceData.quoteId,
-        amount,
-        pendingTxId
-      );
+      // Invoice checker will handle payment status automatically
     } catch (error) {
       console.error("Error creating invoice:", error);
       setError(
@@ -150,71 +144,6 @@ const SixtyWallet: React.FC<{mintUrl:string, usingNip60: boolean, setUsingNip60:
   const handleQuickMint = async (amount: number) => {
     setReceiveAmount(amount.toString());
     await handleCreateInvoice(amount);
-  };
-
-  // Poll for payment status
-  const checkPaymentStatus = async (
-    mintUrl: string,
-    quoteId: string,
-    amount: number,
-    pendingTxId: string
-  ) => {
-    try {
-      // Check if payment has been received
-      const proofs = await mintTokensFromPaidInvoice(mintUrl, quoteId, amount);
-
-      if (proofs.length > 0) {
-        // update proofs
-        await updateProofs({
-          mintUrl,
-          proofsToAdd: proofs,
-          proofsToRemove: [],
-        });
-
-        // Update stored invoice status
-        await updateInvoice(quoteId, {
-          state: MintQuoteState.PAID,
-          paidAt: Date.now()
-        });
-
-        // Remove the pending transaction
-        transactionHistoryStore.removePendingTransaction(pendingTxId);
-        setPendingTransactionId(null);
-
-        setSuccessMessage(`Received ${formatBalance(amount, 'sats')}!`);
-        setInvoice("");
-        setcurrentMeltQuoteId("");
-        setReceiveAmount("");
-        setTimeout(() => setSuccessMessage(null), 5000);
-      } else {
-        // If payment not received yet, check again in 5 seconds
-        setTimeout(() => {
-          if (currentMeltQuoteId === quoteId) {
-            // Only continue if we're still waiting for this payment
-            checkPaymentStatus(mintUrl, quoteId, amount, pendingTxId);
-          }
-        }, 5000);
-      }
-    } catch (error) {
-      // If it's not a "not paid yet" error, show the error
-      if (
-        !(error instanceof Error && error.message.includes("not been paid"))
-      ) {
-        console.error("Error checking payment status:", error);
-        setError(
-          "Failed to check payment status: " +
-            (error instanceof Error ? error.message : String(error))
-        );
-      } else {
-        // Keep polling if it's just not paid yet
-        setTimeout(() => {
-          if (currentMeltQuoteId === quoteId) {
-            // Only continue if we're still waiting for this payment
-            checkPaymentStatus(mintUrl, quoteId, amount, pendingTxId);
-          }
-        }, 5000);
-      }
-    }
   };
 
 
@@ -283,6 +212,11 @@ const SixtyWallet: React.FC<{mintUrl:string, usingNip60: boolean, setUsingNip60:
     const interval = setInterval(checkLocalBalance, 5000);
     return () => clearInterval(interval);
   }, [usingNip60]);
+
+  // Check invoices when wallet opens
+  useEffect(() => {
+    triggerCheck();
+  }, []); // Run once on mount
 
   const handleAddCustomMint = async () => {
     if (!customMintUrl.trim()) {
