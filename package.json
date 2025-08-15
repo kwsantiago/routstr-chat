@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test:invoices": "node test/invoice-persistence.test.js",
+    "test:invoices:integration": "node test/invoice-integration.test.js",
     "test:setup": "./test/setup-regtest-mint.sh"
   },
   "dependencies": {
