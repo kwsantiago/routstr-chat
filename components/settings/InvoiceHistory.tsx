@@ -1,8 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useInvoiceSync, StoredInvoice } from '@/hooks/useInvoiceSync';
 import { MintQuoteState, MeltQuoteState } from '@cashu/cashu-ts';
 import { formatBalance } from '@/lib/cashu';
-import { Clock, CheckCircle, XCircle, AlertCircle, Zap, Copy, RefreshCw } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, AlertCircle, Zap, Copy, RefreshCw, Trash2, RotateCcw } from 'lucide-react';
 import { useInvoiceChecker } from '@/hooks/useInvoiceChecker';
 import { toast } from 'sonner';
 
@@ -11,8 +11,9 @@ interface InvoiceHistoryProps {
 }
 
 const InvoiceHistory: React.FC<InvoiceHistoryProps> = ({ mintUrl }) => {
-  const { invoices, cloudSyncEnabled } = useInvoiceSync();
+  const { invoices, cloudSyncEnabled, deleteInvoice, resetInvoiceRetry } = useInvoiceSync();
   const { isChecking, pendingCount, triggerCheck } = useInvoiceChecker();
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const filteredInvoices = useMemo(() => {
     let filtered = [...invoices];
@@ -165,9 +166,69 @@ const InvoiceHistory: React.FC<InvoiceHistoryProps> = ({ mintUrl }) => {
                   <button
                     onClick={() => copyToClipboard(invoice.paymentRequest)}
                     className="text-white/50 hover:text-white transition-colors"
+                    title="Copy invoice"
                   >
                     <Copy className="h-3 w-3" />
                   </button>
+                </div>
+                
+                {/* Manual controls */}
+                <div className="flex items-center gap-2 mt-2">
+                  {getStatusText(invoice) === 'Pending' && (invoice.retryCount || 0) > 0 && (
+                    <button
+                      onClick={async () => {
+                        await resetInvoiceRetry(invoice.id);
+                        toast.info('Invoice retry reset');
+                        triggerCheck();
+                      }}
+                      className="text-xs text-yellow-400 hover:text-yellow-300 flex items-center gap-1"
+                      title={`Retry (${invoice.retryCount || 0} attempts)`}
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      Retry Now
+                    </button>
+                  )}
+                  
+                  {(getStatusText(invoice) === 'Expired' || (invoice.retryCount || 0) >= 10) && (
+                    <>
+                      {confirmDelete === invoice.id ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-red-400">Delete?</span>
+                          <button
+                            onClick={async () => {
+                              await deleteInvoice(invoice.id);
+                              toast.success('Invoice deleted');
+                              setConfirmDelete(null);
+                            }}
+                            className="text-xs text-red-400 hover:text-red-300"
+                          >
+                            Yes
+                          </button>
+                          <button
+                            onClick={() => setConfirmDelete(null)}
+                            className="text-xs text-white/50 hover:text-white/70"
+                          >
+                            No
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmDelete(invoice.id)}
+                          className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1"
+                          title="Delete invoice"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          Delete
+                        </button>
+                      )}
+                    </>
+                  )}
+                  
+                  {(invoice.retryCount || 0) >= 10 && (
+                    <span className="text-xs text-red-400">
+                      Max retries reached
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
